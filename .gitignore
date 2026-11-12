@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.vite/
+*.log
+.env
+.env.*
+!.env.example
+*.webm
+*.mp4
+qa/*
+!qa/beebuild-desktop.jpg
+!qa/beebuild-36-agents.jpg
