@@ -3,7 +3,31 @@ export const AGENT_COLORS = ['#00b6a1', '#48b22c', '#e6ac00', '#a65df4', '#f56b7
 
 const clamp = (value, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 const ease = (value) => 1 - Math.pow(1 - clamp(value), 3);
-const weights = { text: 1.2, image: 1.5, box: 1, line: 0.7 };
+const operations = { text: 'type', image: 'image', box: 'layout', line: 'line' };
+// Give each gesture time to read while retaining independent, parallel actions.
+const ACTION_DURATION_SCALE = 1.5;
+
+export function estimateTaskDuration(task) {
+  if (Number.isFinite(task.duration) && task.duration > 0) return task.duration;
+  const { width, height } = task.rect;
+  if (task.kind === 'text') {
+    const lineHeight = task.lineHeight || height;
+    const lines = Math.max(1, task.textLines?.length || Math.round(height / Math.max(1, lineHeight)));
+    const textWidth = task.textLines?.reduce((sum, line) => sum + line.width, 0) || width * lines;
+    const length = task.textLength || textWidth / Math.max(7, (task.fontSize || lineHeight * 0.7) * 0.65);
+    if (task.isHeading || ((task.fontSize || 0) >= 24 && lines <= 2)) return ACTION_DURATION_SCALE * clamp(150 + Math.min(170, length * 7), 170, 340);
+    return ACTION_DURATION_SCALE * clamp(160 + Math.sqrt(length) * 23 + lines * 16, 190, 620);
+  }
+  if (task.kind === 'image') return ACTION_DURATION_SCALE * clamp(390 + Math.sqrt(width * height) * 0.45, 430, 660);
+  if (task.kind === 'line') return ACTION_DURATION_SCALE * clamp(100 + Math.max(width, height) * 0.15, 140, 260);
+  return ACTION_DURATION_SCALE * clamp(110 + Math.sqrt(width * height) * 0.28 + (width + height) * 0.06, 140, 360);
+}
+
+export function buildRectsOverlap(first, second) {
+  const a = first.clip || first.rect;
+  const b = second.clip || second.rect;
+  return Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x) > 0.5 && Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y) > 0.5;
+}
 
 export function isVisibleBuildArea(rect, kind = 'box') {
   const width = rect.width ?? rect.right - rect.left;
@@ -44,10 +68,9 @@ export function textRevealAt(task, progress) {
 
 /** A deterministic animation clock. DOM work and requestAnimationFrame live outside it. */
 export class RebuildScheduler {
-  constructor({ now = () => performance.now(), agentCount = 36, duration = 14000, introDuration = 500, maxDelta = 64 } = {}) {
+  constructor({ now = () => performance.now(), agentCount = 36, introDuration = 140, maxDelta = 64 } = {}) {
     this.now = now;
     this.agentCount = agentCount;
-    this.duration = duration;
     this.introDuration = introDuration;
     this.maxDelta = maxDelta;
     this.speed = 1;
@@ -59,6 +82,7 @@ export class RebuildScheduler {
     this.origin = { x: 400, y: 160 };
     this.viewport = { width: 900, height: 600 };
     this.agents = [];
+    this.regions = new Map();
   }
 
   start(blueprint, { now = this.now(), intro = true, completedIds = [], paused = false, origin = this.origin, viewport = this.viewport } = {}) {
@@ -79,34 +103,36 @@ export class RebuildScheduler {
       order,
       revision: this.revision,
       visible: true,
+      regionId: task.regionId || 'content',
+      regionLabel: task.regionLabel || '内容',
       status: complete.has(task.id) ? 'complete' : 'queued',
       progress: complete.has(task.id) ? 1 : 0,
       agentIndex: null,
+      ownerIndex: null,
       startedAt: null,
     }));
 
-    // Keep the first viewport around fourteen seconds, even with a larger swarm.
-    const pending = this.tasks.filter((task) => task.status !== 'complete');
-    const laneCount = Math.max(1, Math.min(this.agentCount, pending.length));
-    const loads = Array(laneCount).fill(0);
-    const counts = Array(laneCount).fill(0);
-    pending.forEach((task) => {
-      const lane = loads.indexOf(Math.min(...loads));
-      loads[lane] += weights[task.kind] || 1;
-      counts[lane] += 1;
-    });
-    this.durationUnit = Math.max(500, (this.duration - this.introEnds - (laneCount - 1) * 35 - (Math.max(...counts) - 1) * 100) / Math.max(1, ...loads));
-    this.tasks.forEach((task) => { task.duration = task.duration ?? Math.max(500, this.durationUnit * (weights[task.kind] || 1)); });
+    this.tasks.forEach((task) => { task.duration = estimateTaskDuration(task); });
+    this.regions.clear();
+    this.updateRegions(blueprint);
     this.agents = Array.from({ length: this.agentCount }, (_, index) => ({
       index,
       taskId: null,
       position: { ...origin },
       from: { ...origin },
-      availableAt: this.introEnds + index * 35,
+      availableAt: this.introEnds,
       phase: 'assist',
+      operation: 'assist',
+      regionId: null,
+      regionLabel: '',
+      regionRect: null,
+      workRect: null,
+      anchorTaskId: null,
     }));
+    this.allocateRegions();
     this.resumeState = this.introEnds ? 'intro' : 'running';
     this.state = paused ? 'paused' : this.resumeState;
+    this.refreshAgentPositions(true);
     if (this.state === 'running') this.assignTasks();
     this.refreshAgentPositions(true);
     return this.revision;
@@ -125,7 +151,7 @@ export class RebuildScheduler {
         const dy = entry.rect.y - task.rect.y;
         const agent = this.agents[task.agentIndex];
         if (agent?.taskId === task.id) agent.from = { x: agent.from.x + dx, y: agent.from.y + dy };
-        for (const key of ['rect', 'clip', 'lineHeight', 'textLines', 'kind', 'parentId']) {
+        for (const key of ['rect', 'clip', 'lineHeight', 'textLines', 'textLength', 'fontSize', 'isHeading', 'kind', 'parentId', 'regionId', 'regionLabel', 'regionRect', 'taskLabel']) {
           if (entry[key] !== undefined) task[key] = entry[key];
         }
         task.visible = entry.visible !== false;
@@ -135,16 +161,21 @@ export class RebuildScheduler {
           visible: true,
           order: this.tasks.length,
           revision: this.revision,
+          regionId: entry.regionId || 'content',
+          regionLabel: entry.regionLabel || '内容',
           status: 'queued',
           progress: 0,
           agentIndex: null,
+          ownerIndex: null,
           startedAt: null,
-          duration: entry.duration ?? Math.max(500, this.durationUnit * (weights[entry.kind] || 1)),
+          duration: estimateTaskDuration(entry),
         };
         this.tasks.push(added);
         byId.set(added.id, added);
       }
     });
+    this.updateRegions(blueprint);
+    this.allocateRegions();
     if (this.state === 'running') this.assignTasks();
     this.refreshAgentPositions();
   }
@@ -159,7 +190,7 @@ export class RebuildScheduler {
       if (visibleIds.has(task.id)) Object.assign(task, { status: 'queued', progress: 0, startedAt: null, agentIndex: null });
     });
     this.agents.forEach((agent) => {
-      if (visibleIds.has(agent.taskId)) { agent.taskId = null; agent.availableAt = this.virtualTime + agent.index * 20; }
+      if (visibleIds.has(agent.taskId)) { agent.taskId = null; agent.availableAt = this.virtualTime; }
     });
     this.state = 'running';
     this.resumeState = 'running';
@@ -187,7 +218,7 @@ export class RebuildScheduler {
         if (task.progress >= 1) {
           task.status = 'complete';
           agent.taskId = null;
-          agent.availableAt = this.virtualTime + 100;
+          agent.availableAt = this.virtualTime + 18;
         }
       });
       this.assignTasks();
@@ -197,35 +228,137 @@ export class RebuildScheduler {
   }
 
   assignTasks() {
+    this.allocateRegions();
     const byId = new Map(this.tasks.map((task) => [task.id, task]));
+    const running = this.tasks.filter((task) => task.status === 'running' && task.visible);
     this.agents.forEach((agent) => {
-      if (agent.taskId || this.virtualTime < agent.availableAt) return;
-      const task = this.tasks.find((candidate) => candidate.visible && candidate.status === 'queued' && (!candidate.parentId || !byId.has(candidate.parentId) || byId.get(candidate.parentId).status === 'complete'));
+      if (agent.taskId || this.virtualTime < agent.availableAt || running.length >= 24) return;
+      const available = this.tasks.filter((candidate) => candidate.ownerIndex === agent.index && candidate.visible && candidate.status === 'queued' && (!candidate.parentId || !byId.has(candidate.parentId) || byId.get(candidate.parentId).status === 'complete') && !running.some((other) => buildRectsOverlap(candidate, other)));
+      available.sort((a, b) => {
+        const distance = (task) => Math.hypot(task.rect.x - agent.position.x, task.rect.y - agent.position.y);
+        return distance(a) - distance(b) || a.order - b.order;
+      });
+      const task = available[0];
       if (!task) return;
       task.status = 'running';
       task.startedAt = this.virtualTime;
       task.agentIndex = agent.index;
       agent.taskId = task.id;
+      agent.anchorTaskId = task.id;
       agent.from = { ...agent.position };
+      this.setAgentArea(agent, task);
+      agent.operation = operations[task.kind] || 'layout';
+      running.push(task);
+    });
+  }
+
+  updateRegions(blueprint) {
+    this.regions.forEach((region) => { region.visible = false; region.taskCount = 0; });
+    blueprint.forEach((task) => {
+      if (task.visible === false) return;
+      const id = task.regionId || 'content';
+      const rect = task.regionRect || { x: 0, y: 0, width: this.viewport.width, height: this.viewport.height };
+      let region = this.regions.get(id);
+      if (!region) {
+        region = { id, label: task.regionLabel || '内容', rect, order: this.regions.size, taskCount: 0, visible: false };
+        this.regions.set(id, region);
+      }
+      region.label = task.regionLabel || region.label;
+      region.rect = rect;
+      region.visible = true;
+      region.taskCount += 1;
+    });
+    if (!this.regions.size) this.regions.set('content', { id: 'content', label: '内容', rect: { x: 0, y: 0, width: this.viewport.width, height: this.viewport.height }, order: 0, visible: true, taskCount: 0 });
+    this.agents.forEach((agent) => {
+      const region = this.regions.get(agent.regionId);
+      if (region) { agent.regionLabel = region.label; agent.regionRect = { ...region.rect }; }
+    });
+  }
+
+  setAgentArea(agent, task) {
+    const region = this.regions.get(task.regionId);
+    agent.regionId = task.regionId;
+    agent.regionLabel = task.regionLabel;
+    agent.regionRect = { ...(region?.rect || task.regionRect || task.rect) };
+    agent.workRect = { ...(task.clip || task.rect) };
+  }
+
+  /** Reserve each content block once. Scrolling changes geometry, never ownership. */
+  allocateRegions() {
+    if (!this.agents.length) return;
+    const pending = this.tasks.filter((task) => task.visible && task.ownerIndex == null);
+    const workloads = this.agents.map((agent) => this.tasks.reduce((sum, task) => sum + (task.ownerIndex === agent.index && task.status !== 'complete' && (task.visible || task.status === 'running') ? task.duration * (1 - task.progress) : 0), 0));
+    const homes = this.agents.map((agent) => this.tasks.find((task) => task.ownerIndex === agent.index && task.visible) || null);
+    // Interleave semantic regions so the first wave reaches the entire viewport.
+    const queues = new Map();
+    pending.forEach((task) => {
+      if (!queues.has(task.regionId)) queues.set(task.regionId, []);
+      queues.get(task.regionId).push(task);
+    });
+    const ordered = [];
+    while ([...queues.values()].some((queue) => queue.length)) {
+      queues.forEach((queue) => { if (queue.length) ordered.push(queue.shift()); });
+    }
+    ordered.forEach((task) => {
+      const score = (agent) => {
+        const home = homes[agent.index];
+        const point = home?.rect || agent.position;
+        const distance = Math.hypot(task.rect.x - point.x, task.rect.y - point.y);
+        return workloads[agent.index] + distance * 0.12 + (home && home.regionId !== task.regionId ? 65 : 0);
+      };
+      const owner = [...this.agents].sort((a, b) => score(a) - score(b) || a.index - b.index)[0];
+      task.ownerIndex = owner.index;
+      workloads[owner.index] += task.status === 'complete' ? 0 : task.duration;
+      homes[owner.index] ||= task;
+    });
+
+    const byId = new Map(this.tasks.map((task) => [task.id, task]));
+    const standby = [];
+    const counts = new Map();
+    this.agents.forEach((agent) => {
+      const owned = this.tasks.filter((task) => task.visible && task.ownerIndex === agent.index);
+      const previous = byId.get(agent.anchorTaskId);
+      const active = byId.get(agent.taskId);
+      const anchor = active?.visible ? active : owned.find((task) => task.status === 'queued') || (previous?.visible && previous.ownerIndex === agent.index ? previous : owned.at(-1));
+      if (anchor) {
+        agent.anchorTaskId = anchor.id;
+        if (!active || active.visible) this.setAgentArea(agent, anchor);
+        counts.set(anchor.regionId, (counts.get(anchor.regionId) || 0) + 1);
+      } else standby.push(agent);
+    });
+    const visible = [...this.regions.values()].filter((region) => region.visible);
+    const fallback = { id: 'content', label: '内容', rect: { x: 0, y: 0, width: this.viewport.width, height: this.viewport.height } };
+    // Extra pointers keep separate interior stations instead of tracing one perimeter.
+    standby.forEach((agent) => {
+      const region = [...visible].sort((a, b) => b.rect.width * b.rect.height / ((counts.get(b.id) || 0) + 1) - a.rect.width * a.rect.height / ((counts.get(a.id) || 0) + 1))[0] || fallback;
+      const station = counts.get(region.id) || 0;
+      counts.set(region.id, station + 1);
+      const bounds = region.rect;
+      const fraction = (value) => value - Math.floor(value);
+      const x = bounds.x + bounds.width * (0.12 + fraction((agent.index + 1) * 0.61803398875) * 0.76);
+      const y = bounds.y + bounds.height * (0.12 + fraction((agent.index + 1) * 0.38196601125 + station * 0.17) * 0.76);
+      agent.standbyRect = { x: x - 3, y: y - 3, width: 6, height: 6 };
+      if (!agent.taskId) {
+        agent.anchorTaskId = null;
+        agent.regionId = region.id;
+        agent.regionLabel = region.label;
+        agent.regionRect = { ...bounds };
+        agent.workRect = agent.standbyRect;
+      }
     });
   }
 
   hoverPosition(index) {
-    const fraction = (value) => value - Math.floor(value);
-    const seed = (offset) => fraction(Math.sin((index + 1) * 127.1 + offset * 311.7) * 43758.5453);
-    // A stable low-discrepancy scatter avoids rows, columns, and repeated color bands.
-    const u = clamp(fraction(0.19 + (index + 1) * 0.7548776662) + (seed(1) - 0.5) * 0.07, 0.025, 0.975);
-    const v = clamp(fraction(0.37 + (index + 1) * 0.5698402910) + (seed(2) - 0.5) * 0.07, 0.025, 0.975);
-    const usableWidth = Math.max(100, this.viewport.width - 84);
-    const usableHeight = Math.max(100, this.viewport.height - 110);
+    const agent = this.agents[index];
+    const anchor = this.tasks.find((task) => task.id === agent.anchorTaskId && task.visible);
+    const bounds = anchor ? anchor.clip || anchor.rect : agent.standbyRect || agent.workRect || { x: this.origin.x, y: this.origin.y, width: 1, height: 1 };
     const time = this.virtualTime / 1000;
-    const phase = seed(3) * Math.PI * 2;
-    const frequency = 0.25 + seed(4) * 0.32;
-    const driftX = (8 + seed(5) * 12) * (Math.sin(time * frequency + phase) + 0.25 * Math.cos(time * frequency * 0.61 + phase * 1.7));
-    const driftY = (6 + seed(6) * 10) * Math.cos(time * frequency * 0.77 + phase * 0.83);
+    const phase = (index + 1) * 2.39996323;
+    const x = bounds.x + bounds.width * 0.5 + Math.min(2, bounds.width * 0.08) * Math.sin(time * 0.7 + phase);
+    const y = bounds.y + bounds.height * 0.5 + Math.min(1.5, bounds.height * 0.08) * Math.cos(time * 0.5 + phase);
     return {
-      x: clamp(36 + u * usableWidth + driftX, 16, this.viewport.width - 24),
-      y: clamp(48 + v * usableHeight + driftY, 20, this.viewport.height - 32),
+      x: clamp(x, 16, this.viewport.width - 24),
+      y: clamp(y, 20, this.viewport.height - 32),
     };
   }
 
@@ -235,19 +368,17 @@ export class RebuildScheduler {
     const byId = new Map(this.tasks.map((task) => [task.id, task]));
     this.agents.forEach((agent) => {
       if (isIntro) {
-        const ring = Math.floor(agent.index / 12);
-        const angle = agent.index % 12 / 12 * Math.PI * 2 + this.virtualTime / 600 + ring * 0.2;
-        const radius = 55 + ring * 46;
-        agent.position = { x: this.origin.x + Math.cos(angle) * radius, y: this.origin.y + Math.sin(angle) * radius * 0.58 };
+        agent.position = this.hoverPosition(agent.index);
         agent.phase = 'intro';
+        agent.operation = 'assist';
         return;
       }
       const task = byId.get(agent.taskId);
       const position = task?.visible ? this.positionFor(task, agent.from) : null;
       const withinViewport = position && position.x >= 10 && position.x <= this.viewport.width - 20 && position.y >= 10 && position.y <= this.viewport.height - 24;
       const withinClip = position && (!task.clip || task.progress < 0.17 || (position.x >= task.clip.x - 2 && position.x <= task.clip.x + task.clip.width + 2 && position.y >= task.clip.y - 2 && position.y <= task.clip.y + task.clip.height + 2));
-      if (withinViewport && withinClip) { agent.position = position; agent.phase = 'build'; }
-      else { agent.position = this.hoverPosition(agent.index); agent.phase = 'assist'; }
+      if (withinViewport && withinClip) { agent.position = position; agent.phase = 'build'; agent.operation = operations[task.kind] || 'layout'; }
+      else { agent.position = this.hoverPosition(agent.index); agent.phase = 'assist'; agent.operation = 'assist'; }
     });
   }
 
@@ -270,7 +401,15 @@ export class RebuildScheduler {
       }
       return { x: rect.x + rect.width, y: rect.y + rect.height };
     }
-    return { x: rect.x + rect.width * reveal, y: rect.y + rect.height * reveal };
+    if (task.kind === 'line') return rect.width >= rect.height ? { x: rect.x + rect.width * reveal, y: rect.y + rect.height } : { x: rect.x + rect.width, y: rect.y + rect.height * reveal };
+    const perimeter = (rect.width + rect.height) * 2;
+    let distance = perimeter * reveal;
+    if (distance <= rect.width) return { x: rect.x + distance, y: rect.y };
+    distance -= rect.width;
+    if (distance <= rect.height) return { x: rect.x + rect.width, y: rect.y + distance };
+    distance -= rect.height;
+    if (distance <= rect.width) return { x: rect.x + rect.width - distance, y: rect.y + rect.height };
+    return { x: rect.x, y: rect.y + rect.height - (distance - rect.width) };
   }
 
   setSpeed(speed, realTime = this.now()) {
@@ -303,6 +442,7 @@ export class RebuildScheduler {
     this.agents = [];
     this.virtualTime = 0;
     this.lastRealTime = null;
+    this.regions.clear();
   }
 
   snapshot() {

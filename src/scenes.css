@@ -222,3 +222,5 @@
   .files-controls { gap: 10px; }
   .files-search { width: 140px; }
 }
+
+.note-item > [data-build] { display: block; }

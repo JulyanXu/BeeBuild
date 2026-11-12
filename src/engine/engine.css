@@ -41,3 +41,11 @@
 @media (prefers-reduced-motion: reduce) {
   .rebuild-agent { will-change: auto; }
 }
+
+.rebuild-box-trace { position: absolute; inset: 0; overflow: visible; }
+.rebuild-box-trace rect { fill: color-mix(in srgb, var(--agent-color) 5%, transparent); stroke: var(--agent-color); stroke-width: 1.2; }
+.rebuild-line-anchor { position: absolute; top: -2px; width: 5px; height: 5px; background: white; border: 1px solid var(--agent-color); }
+.rebuild-line-anchor.anchor-start { left: 0; }
+.rebuild-line-anchor.anchor-end { right: 0; }
+.rebuild-tool-cursor { left: -10px; top: -10px; stroke-width: 3px; }
+.rebuild-agent--assist .rebuild-agent-arrow { opacity: .48; }

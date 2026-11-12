@@ -74,7 +74,7 @@ export function App() {
     let cancelled = false;
     let timer;
     const image = new window.Image();
-    const ready = () => { Promise.resolve(document.fonts?.ready).then(() => { if (!cancelled && !reduceMotion) timer = setTimeout(() => engineRef.current.start(), 650); }); };
+    const ready = () => { Promise.resolve(document.fonts?.ready).then(() => { if (!cancelled && !reduceMotion) timer = setTimeout(() => engineRef.current.start(), 180); }); };
     image.onload = ready; image.onerror = ready; image.src = '/assets/tree-canopy.png';
     return () => { cancelled = true; clearTimeout(timer); };
   }, []);
@@ -122,13 +122,13 @@ export function App() {
     </header>
     <section ref={rootRef} className={`application-window scene-${scene}`} aria-label={`${currentScene.name}模拟窗口`} data-engine-state={engine.state} data-engine-speed={engine.speed} data-playback-time={Math.round(engine.virtualTime || 0)} data-viewport-complete={!!complete}>
       <header className="window-titlebar">
-        <div className="window-title-left">
-          <div className="traffic-lights" aria-hidden="true" data-build={`${scene}-traffic`} data-kind="box"><i /><i /><i /></div>
+        <div className="window-title-left" data-build-region="window-chrome" data-region-label="标题栏">
+          <div className="traffic-lights" aria-hidden="true">{[0, 1, 2].map(i => <i key={i} data-build={`${scene}-traffic-${i}`} data-kind="box" />)}</div>
           <SidebarSimple size={25} className="titlebar-sidebar" aria-hidden="true" data-build={`${scene}-sidebar-icon`} data-kind="box" />
           <h1 data-build={`${scene}-window-title`} data-kind="text">{currentScene.name}</h1>
         </div>
-        <div className="window-tools" aria-hidden="true" data-build={`${scene}-window-tools`} data-kind="box"><NotePencil /><Trash /><span /><TextAa /><ListBullets /><Table /><ImageSquare /></div>
-        <label className="window-search" data-build={`${scene}-search`} data-kind="box"><MagnifyingGlass size={18} /><input id="window-search" type="search" aria-label="搜索当前场景" placeholder="搜索" value={query} onChange={event => { setQuery(event.target.value); changed(); }} /></label>
+        <div className="window-tools" aria-hidden="true" data-build-region="window-tools" data-region-label="工具栏">{[NotePencil, Trash, null, TextAa, ListBullets, Table, ImageSquare].map((Icon, i) => Icon ? <Icon key={i} data-build={`${scene}-tool-${i}`} data-kind="box" /> : <span key={i} />)}</div>
+        <label data-build-region="window-search" data-region-label="搜索" className="window-search" data-build={`${scene}-search`} data-kind="box"><MagnifyingGlass size={18} /><input id="window-search" type="search" aria-label="搜索当前场景" placeholder="搜索" value={query} onChange={event => { setQuery(event.target.value); changed(); }} /></label>
       </header>
       <SceneContent key={scene} scene={scene} onContentChange={changed} searchQuery={query} />
       {!reduceMotion && <RebuildOverlay engine={engine} rootRef={rootRef} avoidRef={dockRef} />}
@@ -140,7 +140,7 @@ export function App() {
       <button className="playback-button" onClick={togglePlayback} aria-label={paused ? '继续重画' : '暂停重画'}>{paused ? <Play size={19} weight="fill" /> : <Pause size={19} weight="fill" />}<span>{paused ? '继续' : '暂停'}</span></button>
       <div className="speed-container" data-popover>
         <button className="dock-pill speed-button" onClick={() => setMenu(menu === 'speed' ? null : 'speed')} aria-label={`播放速度 ${engine.speed} 倍`} aria-expanded={menu === 'speed'}>{engine.speed}×<CaretDown size={14} /></button>
-        {menu === 'speed' && <div className="dropdown speed-menu"><p className="dropdown-caption">施工速度</p>{[0.5, 1, 2, 3].map(speed => <button key={speed} onClick={() => { engine.setSpeed(speed); setMenu(null); }} aria-label={`${speed} 倍速`}><span>{speed}×</span><small>{speed === 0.5 ? '慢慢欣赏' : speed === 1 ? '从容有序' : speed === 2 ? '轻快一些' : '全速开工'}</small>{engine.speed === speed && <Check size={16} />}</button>)}</div>}
+        {menu === 'speed' && <div className="dropdown speed-menu"><p className="dropdown-caption">施工速度</p>{[0.5, 1, 2, 3].map(speed => <button key={speed} onClick={() => { engine.setSpeed(speed); setMenu(null); }} aria-label={`${speed} 倍速`}><span>{speed}×</span><small>{speed === 0.5 ? '慢慢欣赏' : speed === 1 ? '轻快开工' : speed === 2 ? '加速重建' : '全速开工'}</small>{engine.speed === speed && <Check size={16} />}</button>)}</div>}
       </div>
       <button className="dock-pill replay-button" onClick={engine.replay} aria-label="重播当前视口"><ArrowCounterClockwise size={22} /><span>重播</span></button>
       </> : <><Mark /><div className="launcher-copy"><strong>让熟悉的界面，重新发生。</strong><span>36 个光标，一起把界面重新画出来。</span></div><button className="launch-button" onClick={begin}>重画当前窗口<ArrowRight size={18} /></button><kbd>{shortcutLabel(shortcut)}</kbd></>}

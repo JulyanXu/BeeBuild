@@ -6,7 +6,8 @@ import {
 } from '@phosphor-icons/react';
 import './scenes.css';
 
-const build = (id, kind = 'text') => ({ 'data-build': id, 'data-kind': kind });
+const build = (id, kind = 'text', label) => ({ 'data-build': id, 'data-kind': kind, 'data-task-label': label });
+const region = (id, label) => ({ 'data-build-region': id, 'data-region-label': label });
 
 function useContentChange(values, onContentChange) {
   const callback = useRef(onContentChange);
@@ -88,35 +89,35 @@ function NotesScene({ onContentChange, searchQuery = '' }) {
   const collection = ['窗边植物投在纸上的影子', '书店里恰到好处的行间距', '老相机清晰的机械反馈', '地图上克制而准确的颜色', '一封排版舒服的邮件', '晨间咖啡杯留下的圆形印记'];
 
   return <div className="notes-scene scene-content" aria-label="设计笔记">
-    <aside className="notes-folders" aria-label="笔记文件夹">
+    <aside {...region('notes-folders', '侧栏')} className="notes-folders" aria-label="笔记文件夹">
       <div className="sidebar-caption" {...build('notes-folders-label')}>笔记</div>
-      <nav>{folders.map(item => <button key={item.id} className={`folder-item ${folder === item.id ? 'is-current' : ''}`} aria-pressed={folder === item.id} {...build(`notes-folder-${item.id}`, 'box')} onClick={() => { setFolder(item.id); setNote(item.notes[0]); }}>
-        <item.icon size={20} weight="regular" className={item.icon === Folder ? 'folder-icon' : ''} /><span>{item.label}</span>
+      <nav>{folders.map(item => <button key={item.id} {...region(`notes-folder-${item.id}`, item.label)} className={`folder-item ${folder === item.id ? 'is-current' : ''}`} aria-pressed={folder === item.id} onClick={() => { setFolder(item.id); setNote(item.notes[0]); }}>
+        <item.icon {...build(`notes-folder-${item.id}-icon`, 'box')} size={20} weight="regular" className={item.icon === Folder ? 'folder-icon' : ''} /><span {...build(`notes-folder-${item.id}-label`)}>{item.label}</span>
       </button>)}</nav>
       <div className="sidebar-bottom" {...build('notes-folder-footer')}><span className="local-dot" />储存在此 Mac 上</div>
     </aside>
-    <aside className="notes-list" aria-label="笔记列表">
-      {visibleNotes.map(id => <button key={id} aria-pressed={note === id} className={`note-item ${note === id ? 'is-current' : ''}`} {...build(`notes-list-${id}`, 'box')} onClick={() => setNote(id)}>{notes[id].title}</button>)}
+    <aside {...region('notes-index', '笔记列表')} className="notes-list" aria-label="笔记列表">
+      {visibleNotes.map(id => <button key={id} {...region(`notes-index-${id}`, '笔记条目')} aria-pressed={note === id} className={`note-item ${note === id ? 'is-current' : ''}`} onClick={() => setNote(id)}><span {...build(`notes-list-${id}`)}>{notes[id].title}</span></button>)}
       {visibleNotes.length === 0 && <div className="notes-search-empty" {...build('notes-search-empty')}>没有匹配的笔记</div>}
       <div className="notes-count" {...build('notes-count')}>{visibleNotes.length} 则笔记</div>
     </aside>
     <article ref={articleRef} className="note-document scene-scroll" data-scroll-region="notes-document" aria-label={article.title} tabIndex={0}>
       <div className="note-document-inner" key={note}>
-        <div className="note-eyebrow" {...build(`notes-${note}-eyebrow`)}>{article.eyebrow}</div>
-        <h1 {...build(`notes-${note}-title`)}>{article.title}</h1>
-        <p className="note-intro" {...build(`notes-${note}-intro`)}>{article.intro}</p>
-        <figure className="note-hero" {...build(`notes-${note}-hero`, 'image')}><img src="/assets/tree-canopy.png" alt="阳光穿过绿意盎然的树冠，落在舒展的枝叶之间" /></figure>
-        {article.sections.map(([title, ...paragraphs], index) => <section key={title} className="note-section">
-          <h2 {...build(`notes-${note}-heading-${index}`)}>{title}</h2>
-          {paragraphs.map((paragraph, p) => <p key={p} {...build(`notes-${note}-paragraph-${index}-${p}`)}>{paragraph}</p>)}
-          {index === 2 && <div className="saved-observations" aria-label="收藏列表" data-scroll-region="notes-collection" tabIndex={0}>
-            {collection.map((item, i) => <button key={item} className={`observation-item ${savedItems[i] ? 'is-saved' : ''}`} {...build(`notes-${note}-collection-${i}`, 'box')} aria-pressed={savedItems[i]} onClick={() => setSavedItems(items => items.map((value, position) => position === i ? !value : value))}>
-              <BookmarkSimple size={17} weight={savedItems[i] ? 'fill' : 'regular'} /><span>{item}</span>{savedItems[i] && <Check size={14} />}
+        <div {...region('notes-heading', '标题正文')} className="note-intro-group"><div className="note-eyebrow" {...build(`notes-${note}-eyebrow`)}>{article.eyebrow}</div>
+        <h1 {...build(`notes-${note}-title`, 'text', '输入主标题')}>{article.title}</h1>
+        <p className="note-intro" {...build(`notes-${note}-intro`, 'text', '撰写导语')}>{article.intro}</p></div>
+        <figure {...region('notes-media', '图片')} className="note-hero" {...build(`notes-${note}-hero`, 'image')}><img src="/assets/tree-canopy.png" alt="阳光穿过绿意盎然的树冠，落在舒展的枝叶之间" /></figure>
+        {article.sections.map(([title, ...paragraphs], index) => <section key={title} {...region(`notes-section-${index}`, `正文 ${index + 1}`)} className="note-section">
+          <h2 {...build(`notes-${note}-heading-${index}`, 'text', `小标题 ${index + 1}`)}>{title}</h2>
+          {paragraphs.map((paragraph, p) => <p key={p} {...build(`notes-${note}-paragraph-${index}-${p}`, 'text', `正文 ${index + 1}.${p + 1}`)}>{paragraph}</p>)}
+          {index === 2 && <div {...region('notes-collection', '收藏')} className="saved-observations" aria-label="收藏列表" data-scroll-region="notes-collection" tabIndex={0}>
+            {collection.map((item, i) => <button key={item} {...region(`notes-collection-${i}`, `收藏 ${i + 1}`)} className={`observation-item ${savedItems[i] ? 'is-saved' : ''}`} aria-pressed={savedItems[i]} onClick={() => setSavedItems(items => items.map((value, position) => position === i ? !value : value))}>
+              <BookmarkSimple {...build(`notes-${note}-collection-${i}-icon`, 'box')} size={17} weight={savedItems[i] ? 'fill' : 'regular'} /><span {...build(`notes-${note}-collection-${i}-text`)}>{item}</span>{savedItems[i] && <Check {...build(`notes-${note}-collection-${i}-check`, 'box')} size={14} />}
             </button>)}
           </div>}
           {index < article.sections.length - 1 && <hr {...build(`notes-${note}-divider-${index}`, 'line')} />}
         </section>)}
-        <footer className="note-footer" {...build(`notes-${note}-footer`)}><Leaf size={16} />最后编辑于今天 10:24<span>慢慢来，也很好。</span></footer>
+        <footer {...region('notes-footer', '页尾')} className="note-footer" {...build(`notes-${note}-footer`)}><Leaf size={16} />最后编辑于今天 10:24<span>慢慢来，也很好。</span></footer>
       </div>
     </article>
   </div>;
@@ -137,27 +138,27 @@ function WebScene({ onContentChange, searchQuery = '' }) {
   useContentChange([topic, bookmarked], onContentChange);
   useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }); setBookmarked(false); }, [topic]);
   return <div className="web-scene scene-content">
-    <header className="publication-header">
+    <header {...region('web-nav', '网页导航')} className="publication-header">
       <button className="publication-brand" onClick={() => setTopic('nature')} {...build('web-brand')}>FIELDNOTES<span>日常的另一种视角</span></button>
       <nav aria-label="文章主题">{Object.entries(stories).map(([id, item]) => <button key={id} className={topic === id ? 'is-current' : ''} aria-pressed={topic === id} onClick={() => setTopic(id)} {...build(`web-tab-${id}`)}>{item.category}</button>)}</nav>
       <span className="publication-issue" {...build('web-issue')}>VOL. 08 — 2026</span>
     </header>
     <div ref={scrollRef} className="publication-scroll scene-scroll" data-scroll-region="web-article" tabIndex={0}>
       {searchQuery && <div className="publication-search-results"><span {...build('web-search-summary')}>{matchedStories.length ? `找到 ${matchedStories.length} 篇相关文章` : '没有找到相关文章'}</span>{matchedStories.map(([id, item]) => <button key={id} onClick={() => setTopic(id)} {...build(`web-search-${id}`, 'box')}>{item.title}<ArrowUpRight size={14} /></button>)}</div>}
-      <article className="publication-article" key={topic}>
+      <article className="publication-article" key={topic}><div {...region('web-heading', '文章标题')}>
         <div className="publication-eyebrow" {...build(`web-${topic}-eyebrow`)}><span />{story.tag}</div>
-        <h1 {...build(`web-${topic}-title`)}>{story.title}</h1>
-        <p className="publication-subtitle" {...build(`web-${topic}-subtitle`)}>{story.subtitle}</p>
-        <div className="publication-byline" {...build(`web-${topic}-byline`, 'box')}><span>文 / 林间</span><span>2026 年 11 月 11 日</span><span>阅读约 4 分钟</span><button onClick={() => setBookmarked(value => !value)} aria-pressed={bookmarked}><BookmarkSimple size={18} weight={bookmarked ? 'fill' : 'regular'} />{bookmarked ? '已收藏' : '收藏'}</button></div>
-        <figure className="publication-hero" {...build(`web-${topic}-image`, 'image')}><img src="/assets/tree-canopy.png" alt="从树荫下抬头看，阳光在绿色枝叶之间流动" /><figcaption>在缓慢生长的事物里，找回自己的节奏。</figcaption></figure>
-        <div className="publication-body">{story.sections.map(([title, ...paragraphs], index) => <section key={title}>
+        <h1 {...build(`web-${topic}-title`, 'text', '输入主标题')}>{story.title}</h1>
+        <p className="publication-subtitle" {...build(`web-${topic}-subtitle`, 'text', '撰写导语')}>{story.subtitle}</p>
+        <div className="publication-byline"><span {...build(`web-${topic}-author`)}>文 / 林间</span><span {...build(`web-${topic}-date`)}>2026 年 11 月 11 日</span><span {...build(`web-${topic}-read-time`)}>阅读约 4 分钟</span><button {...build(`web-${topic}-bookmark`, 'box')} onClick={() => setBookmarked(value => !value)} aria-pressed={bookmarked}><BookmarkSimple size={18} weight={bookmarked ? 'fill' : 'regular'} />{bookmarked ? '已收藏' : '收藏'}</button></div></div>
+        <figure {...region('web-media', '封面图片')} className="publication-hero"><img {...build(`web-${topic}-image`, 'image')} src="/assets/tree-canopy.png" alt="从树荫下抬头看，阳光在绿色枝叶之间流动" /><figcaption {...build(`web-${topic}-caption`)}>在缓慢生长的事物里，找回自己的节奏。</figcaption></figure>
+        <div className="publication-body">{story.sections.map(([title, ...paragraphs], index) => <section key={title} {...region(`web-section-${index}`, `段落 ${index + 1}`)}>
           <div className="publication-section-number" {...build(`web-${topic}-number-${index}`)}>0{index + 1}</div>
-          <h2 {...build(`web-${topic}-heading-${index}`)}>{title}</h2>
-          {paragraphs.map((p, i) => <p key={i} {...build(`web-${topic}-paragraph-${index}-${i}`)}>{p}</p>)}
+          <h2 {...build(`web-${topic}-heading-${index}`, 'text', `小标题 ${index + 1}`)}>{title}</h2>
+          {paragraphs.map((p, i) => <p key={i} {...build(`web-${topic}-paragraph-${index}-${i}`, 'text', `正文 ${index + 1}.${i + 1}`)}>{p}</p>)}
           {index === 0 && <blockquote {...build(`web-${topic}-quote`)}>“让注意力停留的地方，<br />成为生活开始生长的地方。”</blockquote>}
         </section>)}
-          <div className="publication-end" {...build(`web-${topic}-end`, 'box')}><Leaf size={21} /><p>把日常看得更仔细一点。</p><span>FIELDNOTES</span></div>
-          <div className="publication-related"><span {...build(`web-${topic}-related-label`)}>继续阅读</span>{Object.entries(stories).filter(([id]) => id !== topic).map(([id, item]) => <button key={id} onClick={() => setTopic(id)} {...build(`web-${topic}-related-${id}`, 'box')}><span>{item.title}</span><ArrowUpRight size={20} /></button>)}</div>
+          <div {...region('web-end', '文章页尾')} className="publication-end" {...build(`web-${topic}-end`, 'box')}><Leaf size={21} /><p>把日常看得更仔细一点。</p><span>FIELDNOTES</span></div>
+          <div {...region('web-related', '继续阅读')} className="publication-related"><span {...build(`web-${topic}-related-label`)}>继续阅读</span>{Object.entries(stories).filter(([id]) => id !== topic).map(([id, item]) => <button key={id} onClick={() => setTopic(id)} {...build(`web-${topic}-related-${id}`, 'box')}><span>{item.title}</span><ArrowUpRight size={20} /></button>)}</div>
         </div>
       </article>
     </div>
@@ -212,7 +213,7 @@ function AppsScene({ onContentChange, searchQuery = '' }) {
   useContentChange([location, view, selected, favorites], onContentChange);
   const selectLocation = id => { setLocation(id); const nextFile = files.find(file => id === 'recent' || (id === 'favorites' ? favorites.includes(file.id) : file.place === id)); setSelected(nextFile?.id || null); };
   return <div className="files-scene scene-content">
-    <aside className="files-sidebar" aria-label="文件位置"><div className="sidebar-caption" {...build('apps-favorites-caption')}>个人收藏</div>
+    <aside {...region('apps-sidebar', '文件位置')} className="files-sidebar" aria-label="文件位置"><div className="sidebar-caption" {...build('apps-favorites-caption')}>个人收藏</div>
       {fileLocations.map(item => <button key={item.id} className={`file-location ${location === item.id ? 'is-current' : ''}`} aria-pressed={location === item.id} onClick={() => selectLocation(item.id)} {...build(`apps-location-${item.id}`, 'box')}><item.icon size={19} /><span>{item.label}</span></button>)}
       <div className="sidebar-caption location-caption" {...build('apps-locations-caption')}>位置</div>
       <div className="file-location file-disk" {...build('apps-disk', 'box')}><HardDrives size={19} /><span>Macintosh HD</span></div>
@@ -220,21 +221,21 @@ function AppsScene({ onContentChange, searchQuery = '' }) {
       <button className="file-location" onClick={() => selectLocation('favorites')} {...build('apps-tag-green', 'box')}><span className="file-tag-dot" />灵感</button>
     </aside>
     <main className="files-main">
-      <div className="files-controls"><h2 {...build('apps-location-title')}>{fileLocations.find(item => item.id === location)?.label}</h2><span className="files-location-path" {...build('apps-location-path')}>Macintosh HD / 用户 / Studio</span><div className="files-view-options" {...build('apps-view-options', 'box')}><button className={view === 'grid' ? 'is-current' : ''} aria-label="图标视图" aria-pressed={view === 'grid'} onClick={() => setView('grid')}><GridFour size={19} /></button><button className={view === 'list' ? 'is-current' : ''} aria-label="列表视图" aria-pressed={view === 'list'} onClick={() => setView('list')}><List size={20} /></button></div></div>
-      {view === 'list' && <div className="files-column-labels" {...build('apps-column-labels', 'box')}><span>名称 <CaretDown size={11} /></span><span>修改日期</span><span>种类</span></div>}
-      <div className={`files-content scene-scroll is-${view}`} data-scroll-region="apps-file-list" tabIndex={0} aria-label="文件列表">
-        {visibleFiles.map(file => <button key={file.id} className={`file-row ${selected === file.id ? 'is-current' : ''}`} aria-pressed={selected === file.id} onClick={() => setSelected(file.id)} {...build(`apps-file-${file.id}`, 'box')}><span className="file-name"><file.icon size={view === 'grid' ? 54 : 21} weight={file.icon === Folder ? 'fill' : 'regular'} className={file.icon === Folder ? 'file-folder-icon' : 'file-document-icon'} /><span>{file.name}</span></span><span className="file-date">{file.date}</span><span className="file-type">{file.type}</span></button>)}
+      <div {...region('apps-tools', '列表工具')} className="files-controls"><h2 {...build('apps-location-title')}>{fileLocations.find(item => item.id === location)?.label}</h2><span className="files-location-path" {...build('apps-location-path')}>Macintosh HD / 用户 / Studio</span><div className="files-view-options" {...build('apps-view-options', 'box')}><button className={view === 'grid' ? 'is-current' : ''} aria-label="图标视图" aria-pressed={view === 'grid'} onClick={() => setView('grid')}><GridFour size={19} /></button><button className={view === 'list' ? 'is-current' : ''} aria-label="列表视图" aria-pressed={view === 'list'} onClick={() => setView('list')}><List size={20} /></button></div></div>
+      {view === 'list' && <div {...region('apps-columns', '列标题')} className="files-column-labels" {...build('apps-column-labels', 'box')}><span>名称 <CaretDown size={11} /></span><span>修改日期</span><span>种类</span></div>}
+      <div className={`files-content scene-scroll is-${view}`} data-scroll-region="apps-file-list" {...region('apps-files', '文件列表')} tabIndex={0} aria-label="文件列表">
+        {visibleFiles.map((file, fileIndex) => <button key={file.id} className={`file-row ${selected === file.id ? 'is-current' : ''}`} aria-pressed={selected === file.id} onClick={() => setSelected(file.id)} {...region(`apps-file-${file.id}`, `文件 ${fileIndex + 1}`)}><span className="file-name"><file.icon {...build(`apps-file-${file.id}-icon`, 'box', `图标 ${fileIndex + 1}`)} size={view === 'grid' ? 54 : 21} weight={file.icon === Folder ? 'fill' : 'regular'} className={file.icon === Folder ? 'file-folder-icon' : 'file-document-icon'} /><span {...build(`apps-file-${file.id}-name`, 'text', `文件名 ${fileIndex + 1}`)}>{file.name}</span></span><span className="file-date" {...build(`apps-file-${file.id}-date`, 'text', `日期 ${fileIndex + 1}`)}>{file.date}</span><span className="file-type" {...build(`apps-file-${file.id}-type`, 'text', `类型 ${fileIndex + 1}`)}>{file.type}</span></button>)}
         {visibleFiles.length === 0 && <div className="files-empty" {...build('apps-empty', 'box')}><MagnifyingGlass size={34} /><p>没有找到“{query}”</p><span>试试另一个文件名称</span></div>}
       </div>
-      <footer className="files-status" {...build('apps-status')}><Folder size={13} /><span>{fileLocations.find(item => item.id === location)?.label}</span><span>{visibleFiles.length} 个项目</span></footer>
+      <footer {...region('apps-status', '状态栏')} className="files-status" {...build('apps-status')}><Folder size={13} /><span>{fileLocations.find(item => item.id === location)?.label}</span><span>{visibleFiles.length} 个项目</span></footer>
     </main>
-    {selectedFile && <aside className="file-detail scene-scroll" data-scroll-region="apps-detail" aria-label="文件详情" key={selectedFile.id}>
+    {selectedFile && <aside {...region('apps-detail', '文件详情')} className="file-detail scene-scroll" data-scroll-region="apps-detail" aria-label="文件详情" key={selectedFile.id}>
       {selectedFile.preview ? <figure className="file-detail-preview" {...build(`apps-detail-${selectedFile.id}-preview`, 'image')}><img src="/assets/tree-canopy.png" alt={selectedFile.description} /></figure> : <div className="file-detail-large-icon" {...build(`apps-detail-${selectedFile.id}-icon`, 'image')}><selectedFile.icon size={88} weight={selectedFile.icon === Folder ? 'fill' : 'regular'} /></div>}
       <h3 {...build(`apps-detail-${selectedFile.id}-name`)}>{selectedFile.name}</h3>
       <p className="file-detail-type" {...build(`apps-detail-${selectedFile.id}-type`)}>{selectedFile.type} · {selectedFile.size}</p>
       <button className={`file-favorite-button ${favorites.includes(selectedFile.id) ? 'is-saved' : ''}`} onClick={() => setFavorites(items => items.includes(selectedFile.id) ? items.filter(id => id !== selectedFile.id) : [...items, selectedFile.id])} {...build(`apps-detail-${selectedFile.id}-favorite`, 'box')}><Star size={15} weight={favorites.includes(selectedFile.id) ? 'fill' : 'regular'} />{favorites.includes(selectedFile.id) ? '已加入个人收藏' : '加入个人收藏'}</button>
       <hr {...build(`apps-detail-${selectedFile.id}-divider`, 'line')} />
-      <h4 {...build(`apps-detail-${selectedFile.id}-information`)}>信息</h4><dl {...build(`apps-detail-${selectedFile.id}-metadata`, 'box')}><div><dt>修改时间</dt><dd>{selectedFile.date}</dd></div><div><dt>大小</dt><dd>{selectedFile.size}</dd></div><div><dt>位置</dt><dd>Macintosh HD / {fileLocations.find(item => item.id === selectedFile.place)?.label}</dd></div></dl>
+      <h4 {...build(`apps-detail-${selectedFile.id}-information`)}>信息</h4><dl><div><dt {...build(`apps-detail-${selectedFile.id}-date-label`)}>修改时间</dt><dd {...build(`apps-detail-${selectedFile.id}-date`)}>{selectedFile.date}</dd></div><div><dt {...build(`apps-detail-${selectedFile.id}-size-label`)}>大小</dt><dd {...build(`apps-detail-${selectedFile.id}-size`)}>{selectedFile.size}</dd></div><div><dt {...build(`apps-detail-${selectedFile.id}-place-label`)}>位置</dt><dd {...build(`apps-detail-${selectedFile.id}-place`)}>Macintosh HD / {fileLocations.find(item => item.id === selectedFile.place)?.label}</dd></div></dl>
       <h4 {...build(`apps-detail-${selectedFile.id}-description-label`)}>备注</h4><p className="file-detail-description" {...build(`apps-detail-${selectedFile.id}-description`)}>{selectedFile.description}</p>
     </aside>}
   </div>;

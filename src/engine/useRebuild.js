@@ -42,6 +42,19 @@ class RebuildController {
     const rootRect = this.root.getBoundingClientRect();
     const rootClip = { left: rootRect.left + this.root.clientLeft, top: rootRect.top + this.root.clientTop, right: rootRect.left + this.root.clientLeft + this.root.clientWidth, bottom: rootRect.top + this.root.clientTop + this.root.clientHeight };
     const blueprint = [];
+    const regions = new Map();
+    const regionBounds = new Map();
+    const visibleRegionBounds = (regionElement) => {
+      if (regionBounds.has(regionElement)) return regionBounds.get(regionElement);
+      let bounds = intersect(regionElement.getBoundingClientRect(), rootClip);
+      for (let ancestor = regionElement.parentElement; ancestor && ancestor !== this.root; ancestor = ancestor.parentElement) {
+        const style = getComputedStyle(ancestor);
+        if (/(auto|scroll|hidden|clip)/.test(`${style.overflowX} ${style.overflowY}`)) bounds = intersect(bounds, ancestor.getBoundingClientRect());
+      }
+      const result = { x: bounds.left - rootClip.left, y: bounds.top - rootClip.top, width: Math.max(0, bounds.right - bounds.left), height: Math.max(0, bounds.bottom - bounds.top) };
+      regionBounds.set(regionElement, result);
+      return result;
+    };
     this.root.querySelectorAll('[data-build]').forEach((element) => {
       const id = element.dataset.build;
       const kind = element.dataset.kind || 'box';
@@ -57,6 +70,20 @@ class RebuildController {
         ancestor = ancestor.parentElement;
       }
       if (!isVisibleBuildArea(clip, kind) || !isVisibleBuildArea(rect, kind) || computed.display === 'none') return;
+      const regionElement = element.closest('[data-build-region]') || this.root;
+      const regionId = regionElement.dataset.buildRegion || 'content';
+      const regionLabel = regionElement.dataset.regionLabel || '界面';
+      const area = visibleRegionBounds(regionElement);
+      const previousArea = regions.get(regionId);
+      // Semantic containers provide context; each leaf gets its own task owner.
+      if (previousArea) {
+        const right = Math.max(previousArea.x + previousArea.width, area.x + area.width);
+        const bottom = Math.max(previousArea.y + previousArea.height, area.y + area.height);
+        previousArea.x = Math.min(previousArea.x, area.x);
+        previousArea.y = Math.min(previousArea.y, area.y);
+        previousArea.width = right - previousArea.x;
+        previousArea.height = bottom - previousArea.y;
+      } else regions.set(regionId, { ...area });
       if (!this.records.has(element)) {
         this.records.set(element, { id, opacity: element.style.opacity, clipPath: element.style.clipPath, willChange: element.style.willChange, baseOpacity: computed.opacity });
       }
@@ -80,6 +107,12 @@ class RebuildController {
       blueprint.push({
         id,
         kind,
+        regionId,
+        regionLabel,
+        taskLabel: element.dataset.taskLabel || (kind === 'text' ? element.textContent.trim().replace(/\s+/g, ' ').slice(0, 5) : kind === 'image' ? '放置图片' : kind === 'line' ? '绘制分隔线' : `${regionLabel.slice(0, 3)}控件`),
+        textLength: element.textContent?.trim().length || 0,
+        fontSize: parseFloat(computed.fontSize) || 14,
+        isHeading: /^H[1-6]$/.test(element.tagName),
         visible: true,
         parentId: element.dataset.parent || null,
         lineHeight,
@@ -88,7 +121,7 @@ class RebuildController {
         clip: { x: clip.left - rootClip.left, y: clip.top - rootClip.top, width: clip.right - clip.left, height: clip.bottom - clip.top },
       });
     });
-    return blueprint.sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x);
+    return blueprint.map(task => ({ ...task, regionRect: { ...regions.get(task.regionId) } })).sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x);
   }
 
   restore(element, record) {

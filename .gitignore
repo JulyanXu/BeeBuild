@@ -10,3 +10,6 @@ dist/
 qa/*
 !qa/beebuild-desktop.jpg
 !qa/beebuild-36-agents.jpg
+!qa/beebuild-zoned-fast.jpg
+!qa/beebuild-owned-fast.png
+!qa/beebuild-release.png

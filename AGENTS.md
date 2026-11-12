@@ -10,6 +10,9 @@
 - Show 36 agent pointers. Keep the scene readable by emphasizing active workers and reducing idle pointer labels.
 - Provide local animation recording with an explicit browser capture picker and downloadable video. Do not claim GIF export unless implemented.
 - Maintain this project in its dedicated GitHub repository, including automated tests and a production build check.
+- Default reconstruction must feel brisk: use short independent actions by content type, not a fixed long duration for every viewport. Agents should own distinct semantic regions and unique tasks, with no simultaneous drawing over the same area. Reference Swarm Rebuild's pacing and varied tools while keeping our implementation independent.
+- Balance briskness with readable gestures: the latest feedback asked to slow the very-fast revision slightly. Use roughly 210–990 ms independent actions, a 140 ms intro and short handoffs; the typical scheduler viewport is about 2 seconds at 1×. Keep 0.5/1/2/3× available. Each Agent must own identifiable content and a distinct local anchor; do not have multiple Agents repeatedly working around one shared region perimeter. File rows need stable per-file regions and separate icon/name/date/type tasks.
+- The GitHub README is the product introduction page: lead with the BeeBuild mark, clear screenshots, value and features, then usage and development details. The user explicitly approved making JulyanXu/BeeBuild public for launch.
 
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 
